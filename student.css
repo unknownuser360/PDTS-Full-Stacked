@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; font-family:"Poppins",sans-serif; }
+body { background:#f4f6fb; color:#333; min-height:100vh; }
+
+/* HEADER */
+.header {
+    display:flex; justify-content:space-between; align-items:center;
+    background:#7494ec; color:#fff; padding:18px 30px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    border-bottom-left-radius:10px; border-bottom-right-radius:10px;
+}
+.header h1 { font-size:22px; font-weight:700; text-decoration:underline; }
+
+/* PROFILE */
+.profile {
+    position: relative; display:flex; align-items:center; gap:12px; cursor:pointer;
+}
+.profile-logo { font-size:22px; }
+.profile-arrow { font-size:12px; transition:0.3s; }
+.profile-arrow.open { transform: rotate(180deg); }
+.profile-dropdown {
+    position:absolute; top:38px; right:0; background:#fff; color:#333; border-radius:8px;
+    padding:12px 18px; box-shadow:0 4px 12px rgba(0,0,0,0.2); min-width:180px;
+    opacity:0; transform:translateY(-10px); transition:all 0.25s ease; display:none; z-index:1000;
+}
+.profile-dropdown.show { display:block; opacity:1; transform:translateY(0); }
+.profile-dropdown p, .profile-dropdown a { margin:5px 0; font-size:14px; transition:color 0.2s; }
+.profile-dropdown p:hover, .profile-dropdown a:hover { color:#7494ec; }
+
+/* DASHBOARD */
+.dashboard-container { display:flex; flex-direction:column; align-items:center; max-width:1150px; margin:30px auto; padding:0 20px; }
+.card {
+    background:#fff; padding:25px; margin-bottom:25px; border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,0.08); width:100%; max-width:1100px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+.card:hover { transform: translateY(-5px); box-shadow:0 10px 25px rgba(0,0,0,0.15); }
+.welcome-card { text-align:center; }
+
+/* BUTTONS */
+button { padding:12px 20px; background:#7494ec; color:#fff; border:none; border-radius:8px; font-size:16px; cursor:pointer; transition:0.3s; }
+button:hover { background:#5e7ad9; }
+
+/* CARD HEADER */
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; }
+.small-btn { padding:6px 12px; font-size:14px; border-radius:6px; background:#7494ec; color:#fff; border:none; cursor:pointer; transition:0.3s; }
+.small-btn:hover { background:#6884d3; }
+
+/* TABLE */
+.complaint-table { width:100%; border-collapse:collapse; margin-top:15px; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.05); }
+.complaint-table th, .complaint-table td { border:1px solid #ddd; padding:12px 10px; text-align:center; }
+.complaint-table th { background:#f2f2f2; font-weight:600; }
+.complaint-table tr:nth-child(even) { background:#fafafa; }
+.complaint-table tr:hover { background:#eef2fc; transform:scale(1.01); transition:0.2s; }
+.no-tickets { text-align:center; margin-top:15px; font-size:14px; color:#555; }
+
+/* BADGES */
+.badge { padding:6px 12px; border-radius:6px; color:#fff; font-weight:600; font-size:13px; display:inline-block; }
+.priority-low { background:#6c757d; }
+.priority-medium { background:#fd7e14; }
+.priority-high { background:#dc3545; }
+.priority-urgent { background:#8b0000; }
+.status-pending { background:#f0ad4e; }
+.status-in-progress { background:#17a2b8; }
+.status-completed { background:#28a745; }
+.status-rejected { background:#d9534f; }
+
+/* DETAILS BUTTON */
+.details-btn { padding:7px 14px; background:#7494ec; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; transition:0.3s; }
+.details-btn:hover { background:#6884d3; }
+
+/* MODALS */
+.modal { display:none; position:fixed; z-index:999; padding-top:60px; left:0; top:0; width:100%; height:100%; overflow-y:auto; background-color:rgba(0,0,0,0.55); }
+.modal-content { max-width:600px; margin:auto; background:#fff; padding:28px; border-radius:14px; position:relative; box-shadow:0 6px 20px rgba(0,0,0,0.1); transition:0.3s; }
+.modal-content form input, .modal-content form select, .modal-content form textarea {
+    width:100%; padding:14px; background:#f2f2f2; border:none; border-radius:8px; margin-bottom:16px; font-size:15px; outline:none; transition:0.2s;
+}
+.modal-content form input:focus, .modal-content form select:focus, .modal-content form textarea:focus { background:#fff; box-shadow:0 0 6px rgba(0,0,0,0.1); }
+.modal-content form textarea { resize:vertical; min-height:100px; }
+.modal-content form button { width:100%; }
+.ticket-details p { margin:8px 0; line-height:1.5; }
+.ticket-details a { color:#7494ec; text-decoration:none; font-weight:500; }
+.ticket-details a:hover { text-decoration:underline; }
+
+/* CLOSE BUTTON FIX */
+.close {
+    position:absolute;
+    top:14px;
+    right:18px;
+    font-size:26px;
+    font-weight:bold;
+    cursor:pointer;
+    color:#333;
+    transition:0.2s;
+}
+.close:hover { color:#7494ec; transform:scale(1.2); }
+
+/* HOVER EFFECTS */
+.card:hover { transform: translateY(-5px); box-shadow:0 10px 25px rgba(0,0,0,0.15); }
+.details-btn:hover, .small-btn:hover, button:hover { filter: brightness(1.1); }
+
+/* RESPONSIVE */
+@media(max-width:768px) {
+    .dashboard-container { padding:0 10px; }
+    .complaint-table th, .complaint-table td { font-size:12px; padding:8px; }
+    button, .small-btn { font-size:13px; padding:8px 12px; }
+}
+
+
+.logout-form button {
+    width: 100%;
+    padding: 6px 10px;
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    overflow: hidden;
+}
+
+.logout-form button:hover {
+    background: #c82333;
+}
+
+.logout-icon {
+    font-size: 14px;
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.logout-form button:hover .logout-icon {
+    animation: slideBounce 0.4s forwards;
+}
+
+@keyframes slideBounce {
+    0% { transform: translateX(0); }
+    60% { transform: translateX(6px); }
+    80% { transform: translateX(2px); }
+    100% { transform: translateX(4px); }
+}
