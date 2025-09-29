@@ -22,25 +22,30 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 
 function showMessage($msg, $type = 'success') {
     if (!empty($msg)) {
-        $class = $type === 'success' ? 'alert-success' : 'alert-error';
-        return "<div class='alert $class'>$msg</div>";
+        $class = $type === 'success' ? 'toast-success' : 'toast-error';
+        return "
+        <div class='toast $class'>
+            <span>$msg</span>
+            <button type='button' class='close-btn'>&times;</button>
+        </div>";
     }
     return '';
-
-    
 }
+
+
 
 // Active section
 $activeSection = $_GET['section'] ?? 'dashboard';
+
 
 /* ===========================
    STATS (exclude soft-deleted)
    =========================== */
 $total      = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0")->fetch_assoc()['c'];
-$pending    = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='pending'")->fetch_assoc()['c'];
-$inprogress = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='in progress'")->fetch_assoc()['c'];
-$completed  = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='completed'")->fetch_assoc()['c'];
-$rejected   = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='rejected'")->fetch_assoc()['c'];
+$pending    = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='Pending'")->fetch_assoc()['c'];
+$inprogress = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='In Progress'")->fetch_assoc()['c'];
+$completed  = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='Completed'")->fetch_assoc()['c'];
+$rejected   = $conn->query("SELECT COUNT(*) AS c FROM complaints WHERE is_deleted=0 AND status='Rejected'")->fetch_assoc()['c'];
 
 /* ===========================
    DASHBOARD CHART DATA
@@ -77,16 +82,59 @@ while ($r = $blockGenderRows->fetch_assoc()) {
 }
 
 /* ===========================
-   TICKETS LIST (exclude soft-deleted)
+   TICKETS LIST (exclude soft-deleted) (with Pagination + Filters)
    =========================== */
+$perPage = 20; // tickets per page
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($page - 1) * $perPage;
+
+// Distinct values for filters (for dropdowns)
+$categoriesRes = $conn->query("SELECT DISTINCT category FROM complaints WHERE is_deleted=0 ORDER BY category");
+$prioritiesRes = $conn->query("SELECT DISTINCT priority FROM complaints WHERE is_deleted=0 ORDER BY priority");
+$blocksRes     = $conn->query("SELECT DISTINCT block FROM profile WHERE is_deleted=0 AND block <> '' AND block IS NOT NULL ORDER BY block");
+
+// Capture filters from GET
+$statusFilter     = $_GET['status']     ?? '';
+$categoryFilter   = $_GET['category']   ?? '';
+$priorityFilter   = $_GET['priority']   ?? '';
+$blockFilter      = $_GET['block']      ?? '';
+$techFilter       = $_GET['technician'] ?? '';
+$dateFromFilter   = $_GET['from']       ?? '';
+$dateToFilter     = $_GET['to']         ?? '';
+
+// Build conditions
+$conditions = ["c.is_deleted=0"];
+if ($statusFilter)   $conditions[] = "c.status = '".$conn->real_escape_string($statusFilter)."'";
+if ($categoryFilter) $conditions[] = "c.category = '".$conn->real_escape_string($categoryFilter)."'";
+if ($priorityFilter) $conditions[] = "c.priority = '".$conn->real_escape_string($priorityFilter)."'";
+if ($blockFilter)    $conditions[] = "p.block = '".$conn->real_escape_string($blockFilter)."'";
+if ($techFilter)     $conditions[] = "c.assigned_to = ".intval($techFilter);
+if ($dateFromFilter && $dateToFilter) {
+    $conditions[] = "DATE(c.created_at) BETWEEN '".$conn->real_escape_string($dateFromFilter)."' AND '".$conn->real_escape_string($dateToFilter)."'";
+}
+
+$whereSql = implode(" AND ", $conditions);
+
+// Count tickets with filters
+$totalTickets = $conn->query("
+    SELECT COUNT(*) AS c
+    FROM complaints c
+    JOIN profile p ON c.student_id = p.student_id
+    WHERE $whereSql
+")->fetch_assoc()['c'];
+$totalPages = ceil($totalTickets / $perPage);
+
+// Fetch tickets with filters
 $tickets = $conn->query("
     SELECT c.*, p.name, p.block, p.room_number, t.name AS tech_name
     FROM complaints c
     JOIN profile p ON c.student_id = p.student_id
     LEFT JOIN profile t ON c.assigned_to = t.id
-    WHERE c.is_deleted=0
+    WHERE $whereSql
     ORDER BY c.id DESC
+    LIMIT $perPage OFFSET $offset
 ");
+
 
 /* ===========================
    TECHNICIAN LIST FOR ASSIGNMENT
@@ -99,14 +147,40 @@ $techList = $conn->query("
 ");
 
 /* ===========================
-   STAFF (exclude admins; exclude soft-deleted)
+   STAFF (exclude admins; exclude soft-deleted) with filters + pagination
    =========================== */
+$staffPerPage = 10; // staff per page
+$staffPage = isset($_GET['staff_page']) ? max(1, intval($_GET['staff_page'])) : 1;
+$staffOffset = ($staffPage - 1) * $staffPerPage;
+
+// Capture staff filters
+$roleFilter   = $_GET['role']   ?? '';
+$searchFilter = $_GET['search'] ?? '';
+
+// Build conditions
+$staffConditions = ["role IN ('penyelia','technician')", "is_deleted=0"];
+if ($roleFilter) {
+    $staffConditions[] = "role = '".$conn->real_escape_string($roleFilter)."'";
+}
+if ($searchFilter) {
+    $s = $conn->real_escape_string($searchFilter);
+    $staffConditions[] = "(name LIKE '%$s%' OR email LIKE '%$s%')";
+}
+$staffWhereSql = implode(" AND ", $staffConditions);
+
+// Count staff for pagination
+$totalStaff = $conn->query("SELECT COUNT(*) AS c FROM profile WHERE $staffWhereSql")->fetch_assoc()['c'];
+$totalStaffPages = ceil($totalStaff / $staffPerPage);
+
+// Fetch staff with filters + pagination
 $staff = $conn->query("
     SELECT *
     FROM profile
-    WHERE role IN ('penyelia','technician') AND is_deleted=0
+    WHERE $staffWhereSql
     ORDER BY role, name
+    LIMIT $staffPerPage OFFSET $staffOffset
 ");
+
 
 /* Staff stats (for profile card): preload into an array keyed by staff id */
 $staffStats = [];
@@ -123,7 +197,7 @@ if (!empty($staffIds)) {
         FROM complaints
         WHERE is_deleted=0
           AND assigned_to IN ($idsCsv)
-          AND status NOT IN ('completed','rejected')
+          AND status NOT IN ('Completed','Rejected')
         GROUP BY assigned_to
     ");
     while ($r = $workloadRes->fetch_assoc()) {
@@ -136,7 +210,7 @@ if (!empty($staffIds)) {
         FROM complaints
         WHERE is_deleted=0
           AND assigned_to IN ($idsCsv)
-          AND status='completed'
+          AND status='Completed'
         GROUP BY assigned_to
     ");
     while ($r = $handledRes->fetch_assoc()) {
@@ -149,7 +223,7 @@ if (!empty($staffIds)) {
         FROM complaints
         WHERE is_deleted=0
           AND assigned_to IN ($idsCsv)
-          AND status='rejected'
+          AND status='Rejected'
         GROUP BY assigned_to
     ");
     while ($r = $rejRes->fetch_assoc()) {
@@ -172,23 +246,44 @@ if (!empty($staffIds)) {
 <div class="sidebar">
     <h2>Admin Panel</h2>
     <ul>
-        <li onclick="showSection('dashboard')" class="<?= $activeSection=='dashboard'?'active':'' ?>">📊 Dashboard</li>
-        <li onclick="showSection('tickets')"   class="<?= $activeSection=='tickets'?'active':'' ?>">🎫 Ticket Management</li>
-        <li onclick="showSection('staff')"     class="<?= $activeSection=='staff'?'active':'' ?>">👥 Staff</li>
-        <li onclick="showSection('history')"   class="<?= $activeSection=='history'?'active':'' ?>">🗄️ History</li>
-        <li>
-            <form action="logout.php" method="post">
-                <button type="submit" class="logout-btn">⏻ Logout</button>
-            </form>
-        </li>
-    </ul>
+    <li>
+        <a href="?section=dashboard" class="<?= $activeSection=='dashboard'?'active':'' ?>">
+            📊 Dashboard
+        </a>
+    </li>
+    <li>
+        <a href="?section=tickets" class="<?= $activeSection=='tickets'?'active':'' ?>">
+            🎫 Ticket Management
+        </a>
+    </li>
+    <li>
+        <a href="?section=staff" class="<?= $activeSection=='staff'?'active':'' ?>">
+            👥 Staff
+        </a>
+    </li>
+    <li>
+        <a href="?section=history" class="<?= $activeSection=='history'?'active':'' ?>">
+            🗄️ History
+        </a>
+    </li>
+    <li>
+        <form action="logout.php" method="post">
+            <button type="submit" class="logout-btn">⏻ Logout</button>
+        </form>
+    </li>
+</ul>
+
+
 </div>
 
 <div class="main-content">
 
     <!-- FEEDBACK -->
+  <div id="toast-container">
     <?= showMessage($success, 'success'); ?>
     <?= showMessage($error, 'error'); ?>
+</div>
+
 
     <!-- DASHBOARD -->
     <section id="dashboard" class="section <?= $activeSection=='dashboard'?'active':'' ?>">
@@ -216,7 +311,60 @@ if (!empty($staffIds)) {
     <!-- TICKETS -->
     <section id="tickets" class="section <?= $activeSection=='tickets'?'active':'' ?>">
         <h1>Ticket Management</h1>
+        <!-- FILTER BAR -->
+    <form method="GET" class="filter-bar">
+      <input type="hidden" name="section" value="tickets">
+
+      <!-- status -->
+      <select name="status">
+        <option value="">-- All Status --</option>
+        <?php foreach (['Pending','In Progress','Completed','Rejected'] as $s): ?>
+          <option value="<?= $s ?>" <?= $statusFilter==$s?'selected':'' ?>><?= $s ?></option>
+        <?php endforeach; ?>
+      </select>
+
+      <!-- category -->
+      <select name="category">
+        <option value="">-- All Categories --</option>
+        <?php $categoriesRes->data_seek(0); while ($r = $categoriesRes->fetch_assoc()): ?>
+          <option value="<?= $r['category'] ?>" <?= $categoryFilter==$r['category']?'selected':'' ?>><?= $r['category'] ?></option>
+        <?php endwhile; ?>
+      </select>
+
+      <!-- priority -->
+      <select name="priority">
+        <option value="">-- All Priorities --</option>
+        <?php $prioritiesRes->data_seek(0); while ($r = $prioritiesRes->fetch_assoc()): ?>
+          <option value="<?= $r['priority'] ?>" <?= $priorityFilter==$r['priority']?'selected':'' ?>><?= $r['priority'] ?></option>
+        <?php endwhile; ?>
+      </select>
+
+      <!-- block -->
+      <select name="block">
+        <option value="">-- All Blocks --</option>
+        <?php $blocksRes->data_seek(0); while ($r = $blocksRes->fetch_assoc()): ?>
+          <option value="<?= $r['block'] ?>" <?= $blockFilter==$r['block']?'selected':'' ?>><?= $r['block'] ?></option>
+        <?php endwhile; ?>
+      </select>
+
+      <!-- technician -->
+      <select name="technician">
+        <option value="">-- All Technicians --</option>
+        <?php $techList->data_seek(0); while ($t = $techList->fetch_assoc()): ?>
+          <option value="<?= $t['id'] ?>" <?= $techFilter==$t['id']?'selected':'' ?>><?= $t['name'] ?></option>
+        <?php endwhile; ?>
+      </select>
+
+      <!-- date range -->
+      <input type="date" name="from" value="<?= $dateFromFilter ?>">
+      <input type="date" name="to" value="<?= $dateToFilter ?>">
+
+      <!-- buttons -->
+      <button type="submit">Filter</button>
+      <a href="?section=tickets" class="reset-btn">Reset</a>
+    </form>
         <table>
+           
             <thead>
                 <tr>
                     <th>No.</th><th>Student</th><th>Block</th><th>Room</th>
@@ -225,8 +373,9 @@ if (!empty($staffIds)) {
                 </tr>
             </thead>
             <tbody>
+
             <?php
-            $seq = 1;
+            $seq = $offset + 1;
             $tickets->data_seek(0);
             while($row = $tickets->fetch_assoc()): ?>
                 <tr>
@@ -250,10 +399,11 @@ if (!empty($staffIds)) {
                             <input type="hidden" name="id" value="<?= $row['id'] ?>">
                             <input type="hidden" name="section" value="tickets">
                             <select name="status" onchange="this.form.submit()">
-                                <option value="pending"     <?= $row['status']=='pending'?'selected':'' ?>>Pending</option>
-                                <option value="in progress" <?= $row['status']=='in progress'?'selected':'' ?>>In Progress</option>
-                                <option value="completed"   <?= $row['status']=='completed'?'selected':'' ?>>Completed</option>
-                                <option value="rejected"    <?= $row['status']=='rejected'?'selected':'' ?>>Rejected</option>
+                                <option value="Pending"     <?= $row['status']=='Pending'?'selected':'' ?>>Pending</option>
+                                <option value="In Progress" <?= $row['status']=='In Progress'?'selected':'' ?>>In Progress</option>
+                                <option value="Completed"   <?= $row['status']=='Completed'?'selected':'' ?>>Completed</option>
+                                <option value="Rejected"    <?= $row['status']=='Rejected'?'selected':'' ?>>Rejected</option>
+
                             </select>
                         </form>
                     </td>
@@ -308,11 +458,47 @@ if (!empty($staffIds)) {
             <?php endwhile; ?>
             </tbody>
         </table>
+        
+     <!-- Pagination (outside table) -->
+<div class="pagination">
+  <?php if ($page > 1): ?>
+    <a href="?section=tickets&page=<?= $page-1 ?>" class="page-btn">Prev</a>
+  <?php endif; ?>
+
+  <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+    <a href="?section=tickets&page=<?= $i ?>" class="page-btn <?= $i==$page ? 'active' : '' ?>">
+      <?= $i ?>
+    </a>
+  <?php endfor; ?>
+
+  <?php if ($page < $totalPages): ?>
+    <a href="?section=tickets&page=<?= $page+1 ?>" class="page-btn">Next</a>
+  <?php endif; ?>
+</div>
     </section>
 
     <!-- STAFF -->
     <section id="staff" class="section <?= $activeSection=='staff'?'active':'' ?>">
         <h1>Staff</h1>
+            <!-- STAFF FILTER BAR -->
+    <form method="GET" class="filter-bar staff-filter-bar">
+  <input type="hidden" name="section" value="staff">
+
+  <!-- Role -->
+  <select name="role">
+    <option value="">-- All Roles --</option>
+    <option value="penyelia" <?= $roleFilter=='penyelia'?'selected':'' ?>>Penyelia</option>
+    <option value="technician" <?= $roleFilter=='technician'?'selected':'' ?>>Technician</option>
+  </select>
+
+  <!-- Search -->
+  <input type="text" name="search" placeholder="Search name/email"
+         value="<?= htmlspecialchars($searchFilter) ?>">
+
+  <!-- Buttons -->
+  <button type="submit">Filter</button>
+  <a href="?section=staff" class="reset-btn">Reset</a>
+</form>
         <form action="create_staff.php" method="post" class="staff-form">
             <input type="hidden" name="section" value="staff">
             <input type="text" name="name" placeholder="Full Name" required>
@@ -366,6 +552,23 @@ if (!empty($staffIds)) {
                 <?php endwhile; ?>
             </tbody>
         </table>
+        <!-- Staff Pagination -->
+<div class="pagination">
+  <?php if ($staffPage > 1): ?>
+    <a href="?section=staff&staff_page=<?= $staffPage-1 ?>&role=<?= urlencode($roleFilter) ?>&search=<?= urlencode($searchFilter) ?>" class="page-btn">Prev</a>
+  <?php endif; ?>
+
+  <?php for ($i = 1; $i <= $totalStaffPages; $i++): ?>
+    <a href="?section=staff&staff_page=<?= $i ?>&role=<?= urlencode($roleFilter) ?>&search=<?= urlencode($searchFilter) ?>"
+       class="page-btn <?= $i==$staffPage ? 'active' : '' ?>">
+       <?= $i ?>
+    </a>
+  <?php endfor; ?>
+
+  <?php if ($staffPage < $totalStaffPages): ?>
+    <a href="?section=staff&staff_page=<?= $staffPage+1 ?>&role=<?= urlencode($roleFilter) ?>&search=<?= urlencode($searchFilter) ?>" class="page-btn">Next</a>
+  <?php endif; ?>
+</div>
     </section>
 
     <!-- HISTORY -->
@@ -510,7 +713,16 @@ window.addEventListener('DOMContentLoaded', () => {
         type: 'pie',
         data: {
             labels: catLabels,
-            datasets: [{ data: catCounts }]
+            datasets: [{
+                data: catCounts,
+                backgroundColor: [
+                    '#3498db', // Blue
+                    '#e74c3c', // Red
+                    '#2ecc71', // Green
+                    '#f1c40f', // Yellow
+                    '#9b59b6'  // Purple
+                ]
+            }]
         }
     });
 
@@ -520,14 +732,40 @@ window.addEventListener('DOMContentLoaded', () => {
         data: {
             labels: blockLabels,
             datasets: [
-                { label: 'Male', data: maleData },
-                { label: 'Female', data: femaleData }
+                { label: 'Male', data: maleData, backgroundColor: '#3498db' },
+                { label: 'Female', data: femaleData, backgroundColor: '#e74c3c' }
             ]
         },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } }
+        }
     });
 });
+
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.toast').forEach(toast => {
+    // Manual close
+    toast.querySelector('.close-btn').addEventListener('click', () => {
+      toast.classList.add('hide');
+      setTimeout(() => toast.remove(), 500);
+    });
+
+    // Auto close
+    setTimeout(() => {
+      toast.classList.add('hide');
+      setTimeout(() => toast.remove(), 500);
+    }, 4000);
+  });
+});
+
+</script>
+
+
+
 
 </body>
 </html>
