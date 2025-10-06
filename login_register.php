@@ -1,5 +1,4 @@
 <?php
-
 // place these at the very top
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -10,12 +9,12 @@ require __DIR__ . '/PHPMailer-master/src/SMTP.php';
 session_start();
 require_once 'config.php';
 
-// (Optional in dev) show mysqli errors clearly:
+// (Optional in dev)
 // mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 function back($form, $err = '', $ok = '') {
-  $_SESSION['active_form'] = $form;               // 'login' or 'register'
-  if ($err) $_SESSION[$form . '_error'] = $err;   // 'login_error' or 'register_error'
+  $_SESSION['active_form'] = $form;
+  if ($err) $_SESSION[$form . '_error'] = $err;
   if ($ok)  $_SESSION['register_success'] = $ok;
   header("Location: index.php");
   exit();
@@ -63,26 +62,23 @@ if (isset($_POST['register'])) {
   $verification_token = bin2hex(random_bytes(32));
   $hash = password_hash($password, PASSWORD_DEFAULT);
 
- $stmt = $conn->prepare("
-  INSERT INTO profile 
-    (name, email, password, phone, gender, student_id, block, room_number, role, verified, verification_token)
-  VALUES (?,?,?,?,?,?,?,?,?,0,?)
-");
-$stmt->bind_param("sssssssiss", $name, $email, $hash, $phone, $gender, $student_id, $block, $room_number, $role, $verification_token);
-$stmt->execute();
+  $stmt = $conn->prepare("
+    INSERT INTO profile 
+      (name, email, password, phone, gender, student_id, block, room_number, role, verified, verification_token)
+    VALUES (?,?,?,?,?,?,?,?,?,0,?)
+  ");
+  $stmt->bind_param("sssssssiss", $name, $email, $hash, $phone, $gender, $student_id, $block, $room_number, $role, $verification_token);
+  $stmt->execute();
 
-
-
-
-// Create the mailer
-  $mail = new PHPMailer(true); // true enables exceptions
-  $mail->SMTPDebug = 0; // shows connection info
+  // ✅ Send verification email
+  $mail = new PHPMailer(true);
+  $mail->SMTPDebug = 0;
   $mail->Debugoutput = 'html';
   $mail->isSMTP();
   $mail->Host = 'smtp.gmail.com';
   $mail->SMTPAuth = true;
-  $mail->Username = 'oscartuak@gmail.com'; // 🔒 use your email
-  $mail->Password = 'vupc bjly nwdg cgkn';   // ⚠️ use App Password (not real one)
+  $mail->Username = 'oscartuak@gmail.com';
+  $mail->Password = 'vupc bjly nwdg cgkn'; // your Gmail app password
   $mail->SMTPSecure = 'tls';
   $mail->Port = 587;
 
@@ -107,7 +103,6 @@ $stmt->execute();
   }
 }
 
-
 /* ===================== LOGIN (all roles) ===================== */
 if (isset($_POST['login'])) {
   $email = strtolower(trim($_POST['email'] ?? ''));
@@ -118,11 +113,11 @@ if (isset($_POST['login'])) {
   }
 
   // fetch by email; ignore soft-deleted accounts
-  $stmt = $conn->prepare(
-    "SELECT id, name, email, password, role, student_id, block, room_number,gender, is_deleted
-     FROM profile
-     WHERE email=? LIMIT 1"
-  );
+  $stmt = $conn->prepare("
+    SELECT id, name, email, password, role, student_id, block, room_number, gender, verified, is_deleted
+    FROM profile
+    WHERE email=? LIMIT 1
+  ");
   $stmt->bind_param("s", $email);
   $stmt->execute();
   $user = $stmt->get_result()->fetch_assoc();
@@ -131,8 +126,13 @@ if (isset($_POST['login'])) {
     back('login', "Incorrect email or password.");
   }
 
-  // set sessions used by your pages
-  $_SESSION['profile_id']  = (int)$user['id'];      // keep both keys if you already used 'user_id'
+  // ✅ Require verification only for students
+  if ($user['role'] === 'student' && (int)$user['verified'] === 0) {
+    back('login', "Please verify your email before logging in.");
+  }
+
+  // Set sessions
+  $_SESSION['profile_id']  = (int)$user['id'];
   $_SESSION['user_id']     = (int)$user['id'];
   $_SESSION['name']        = $user['name'];
   $_SESSION['email']       = $user['email'];
@@ -140,11 +140,9 @@ if (isset($_POST['login'])) {
   $_SESSION['block']       = $user['block'];
   $_SESSION['student_id']  = $user['student_id'];
   $_SESSION['room_number'] = $user['room_number'];
-  $_SESSION['gender']      = strtolower(trim((string)($user['gender'] ?? ''))); 
+  $_SESSION['gender']      = strtolower(trim((string)($user['gender'] ?? '')));
 
-  
-
-  // redirect by role
+  // Redirect by role
   switch ($user['role']) {
     case 'ketua_penyelia':   header("Location: ketua_penyelia_page.php");   break;
     case 'penyelia':         header("Location: penyelia_page.php");         break;
@@ -156,6 +154,7 @@ if (isset($_POST['login'])) {
   exit();
 }
 
-// Fallback if neither form was submitted:
+// Fallback
 header("Location: index.php");
 exit();
+?>
